@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Storyboard Prompt Generator (Pro UI)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+    <style>
+        :root {
+            --bg-color: #111827; --surface-color: #1f2937; --primary-color: #3b82f6;
+            --primary-hover: #2563eb; --secondary-color: #4b5563; --secondary-hover: #6b7280;
+            --danger-color: #ef4444; --danger-hover: #dc2626; --text-color: #f9fafb;
+            --text-muted: #9ca3af; --border-color: #374151; --input-bg: #1f2937;
+            --success-color: #10b981; --warning-color: #f59e0b;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-color); }
+        .card { background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: 0.75rem; transition: box-shadow 0.3s ease; }
+        .label { color: var(--text-muted); font-weight: 500; font-size: 0.9rem; }
+        .input, .input-number {
+            width: 100%; background-color: var(--input-bg); border: 1px solid var(--border-color);
+            color: var(--text-color); border-radius: 0.5rem; padding: 0.6rem;
+        }
+        .input-number { width: 4.5rem; text-align: center; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem; background-color: var(--secondary-color);
+            color: #fff; border: 0; border-radius: 0.5rem; padding: 0.55rem 0.9rem;
+            font-weight: 600; cursor: pointer; transition: background-color 0.2s;
+        }
+        .btn:hover { background-color: var(--secondary-hover); }
+        .btn:disabled { background-color: var(--secondary-hover); cursor: not-allowed; }
+        .btn-primary { background-color: var(--primary-color); }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-danger:hover { background-color: var(--danger-hover); }
+        .drop-zone {
+            display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem; border-radius: 0.5rem;
+            min-height: 54px; border: 2px dashed var(--border-color); position: relative;
+            transition: all 0.2s ease-in-out; background-color: rgba(0,0,0,0.1);
+        }
+        .keyword-pool {
+            display: flex; flex-wrap: wrap; gap: 0.5rem;
+            max-height: 400px; overflow-y: auto; transition: max-height 0.4s ease-out;
+        }
+        .pool-container.is-collapsed .keyword-pool,
+        .pool-container.is-collapsed .pool-controls { max-height: 0; overflow: hidden; padding: 0; margin: 0; }
+        .dnd-tag {
+            background-color: var(--secondary-color); color: #fff; padding: 0.25rem 0.75rem;
+            border-radius: 9999px; font-size: 0.875rem; display: flex; align-items: center;
+            gap: 0.5rem; cursor: pointer; user-select: none; border-left: 4px solid transparent;
+        }
+        /* Farbliche Differenzierung der Tags */
+        .dnd-tag[data-category="mainSubject"] { border-color: #3b82f6; }
+        .dnd-tag[data-category="visualReaction"] { border-color: #a855f7; }
+        .dnd-tag[data-category="colorPalette"] { border-color: #eab308; }
+        .dnd-tag[data-category="mood"] { border-color: #10b981; }
+
+        .dnd-tag:active { cursor: grabbing; }
+        .remove-tag-btn { cursor: pointer; font-weight: bold; font-size: 1.1em; line-height: 1; }
+        /* Optimiertes "Glow" Feedback */
+        .drag-over { border-style: solid; border-color: transparent; box-shadow: 0 0 10px 2px var(--primary-color); background-color: #2a3647; }
+        .dragging { opacity: 0.5; }
+        textarea#prompt-output {
+            width: 100%; min-height: 150px; background-color: var(--input-bg); border: 1px solid var(--border-color);
+            border-radius: 0.5rem; padding: 1rem; font-family: Menlo, monospace; font-size: 0.9rem; color: var(--text-color);
+        }
+        .collapsible-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .chevron { transition: transform 0.3s; }
+        .is-collapsed .chevron { transform: rotate(-90deg); }
+        /* Interaktives Feedback */
+        .analysis-feedback-item.clickable { cursor: pointer; transition: background-color 0.2s; }
+        .analysis-feedback-item.clickable:hover { background-color: rgba(255,255,255,0.05); }
+        .highlight-flash { animation: flash 1.5s ease-out; }
+        @keyframes flash {
+            0% { box-shadow: 0 0 12px 3px var(--warning-color); }
+            100% { box-shadow: 0 0 0 0 transparent; }
+        }
+        #analysis-checklist { display:flex; gap: 1rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);}
+        .checklist-item { display:flex; align-items:center; gap: 0.4rem; font-size: 0.9rem; color: var(--text-muted); opacity: 0.5; transition: opacity 0.3s, color 0.3s; }
+        .checklist-item.is-active { opacity: 1; color: var(--success-color); font-weight: 500; }
+    </style>
+</head>
+<body class="p-5">
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-7xl mx-auto">
+
+        <div class="lg:col-span-5 space-y-6">
+            <div class="card p-4">
+                <h2 class="text-xl font-bold mb-4">Zufallsgenerator</h2>
+                <div id="random-controls" class="space-y-3"></div>
+                <button id="randomize-by-category-btn" class="btn btn-primary mt-4 w-full">Zufälligen Prompt erstellen</button>
+            </div>
+
+            <div id="keyword-pools-container" class="space-y-6">
+                <!-- Keyword Pools werden hier dynamisch eingefügt -->
+            </div>
+        </div>
+
+        <div class="lg:col-span-7 space-y-6">
+            <div class="card p-4">
+                <h2 class="text-xl font-bold mb-4">Storyboard</h2>
+                <div class="mb-4">
+                    <label class="label block mb-2">Drop-Zone (Keywords hier klicken, fallen lassen oder einfügen)</label>
+                    <div id="storyboard-zone" class="drop-zone"></div>
+                </div>
+                <div class="flex items-center justify-between mt-4 flex-wrap gap-2">
+                    <button id="generate-btn" class="btn btn-primary">Prompt generieren</button>
+                    <button id="gemini-expand-btn" class="btn btn-primary">✨ Mit KI erweitern</button>
+                    <button id="clear-btn" class="btn btn-danger">Leeren</button>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <h2 class="text-xl font-bold mb-2">Prompt-Analyse (Sora-Style)</h2>
+                 <div id="analysis-checklist"></div>
+                <div id="analysis-output" class="text-sm text-gray-300 space-y-3"></div>
+            </div>
+
+            <div class="card p-4">
+                <h2 class="text-xl font-bold mb-4">Generierter Prompt</h2>
+                <textarea id="prompt-output" readonly placeholder="Deine Keywords erscheinen hier..."></textarea>
+                <button id="copy-btn" class="btn mt-2">Kopieren</button>
+                <span id="copy-feedback" class="ml-2 text-sm text-green-400 opacity-0 transition-opacity">Kopiert!</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const App = {
+            db: {},
+            categoryNames: {
+                mainSubject: 'Hauptmotiv', visualReaction: 'Visuelle Reaktion',
+                colorPalette: 'Farbpalette', mood: 'Stimmung'
+            },
+            elements: {},
+
+            init() {
+                // Initial setup
+                this.elements.keywordPoolsContainer = document.getElementById('keyword-pools-container');
+                this.loadState();
+                this.createAllPoolsHTML();
+                this.createRandomControls();
+                this.renderAllPools();
+                this.setupEventListeners();
+                this.setupDragAndDrop();
+                this.analyzeStoryboard();
+            },
+
+            // --- DATABASE & STATE ---
+            saveState() { localStorage.setItem('storyboardGeneratorState', JSON.stringify(this.db.custom)); },
+            loadState() { /* ... unchanged ... */ },
+
+            // --- HTML GENERATION ---
+            createAllPoolsHTML() {
+                let html = '';
+                for (const key in this.categoryNames) {
+                    html += `
+                    <div class="card p-4 pool-container" id="pool-container-${key}">
+                        <div class="collapsible-header" data-pool-key="${key}">
+                            <h3 class="text-lg font-bold">${this.categoryNames[key]}</h3>
+                            <span class="chevron text-2xl">▼</span>
+                        </div>
+                        <div class="pool-controls mt-4 space-y-3">
+                             <input type="search" placeholder="Tags filtern..." class="input text-sm search-pool" data-pool-key="${key}">
+                            <div id="${key}-pool" class="keyword-pool" data-pool-key="${key}"></div>
+                            <input type="text" placeholder="+ neues Tag (Enter)" class="input mt-2 w-full text-sm add-tag-input" data-pool-key="${key}">
+                        </div>
+                    </div>`;
+                }
+                this.elements.keywordPoolsContainer.innerHTML = html;
+                 // Re-query elements that were just created
+                this.elements.pools = document.querySelectorAll('.keyword-pool');
+            },
+
+            createRandomControls() { /* ... unchanged ... */ },
+            
+            // --- CORE LOGIC & RENDERING ---
+            createTagElement(text, category, removable = false) {
+                const tag = document.createElement('div');
+                tag.className = 'dnd-tag';
+                tag.textContent = text;
+                tag.draggable = true;
+                tag.dataset.text = text;
+                tag.dataset.category = category; // Wichtig für Styling und Analyse
+                if (removable) {
+                    // Im Storyboard ist der ganze Tag klickbar zum Entfernen
+                }
+                return tag;
+            },
+            
+            renderAllPools() {
+                this.elements.pools.forEach(pool => {
+                    const key = pool.dataset.poolKey;
+                    if (!key) return;
+                    pool.innerHTML = '';
+                    const allKeywords = [...new Set([...this.db.base[key], ...this.db.custom[key]])];
+                    allKeywords.sort().forEach(keyword => {
+                        pool.appendChild(this.createTagElement(keyword, key, false));
+                    });
+                });
+            },
+            
+            // --- EVENT LISTENERS ---
+            setupEventListeners() {
+                this.elements.generateBtn.addEventListener('click', () => this.generatePrompt());
+                this.elements.clearBtn.addEventListener('click', () => this.clearStoryboard());
+                this.elements.copyBtn.addEventListener('click', () => this.copyPrompt());
+                this.elements.randomizeByCategoryBtn.addEventListener('click', () => this.randomizeByCategory());
+                this.elements.geminiExpandBtn.addEventListener('click', () => this.expandWithGemini());
+
+                // Delegated click listener for adding/removing tags
+                document.addEventListener('click', (e) => {
+                    const tag = e.target.closest('.dnd-tag');
+                    if (!tag) return;
+
+                    const parent = tag.parentElement;
+                    if (parent.classList.contains('keyword-pool')) {
+                        // Add to storyboard
+                        this.elements.storyboardZone.appendChild(this.createTagElement(tag.dataset.text, tag.dataset.category, true));
+                        this.generatePrompt();
+                        this.analyzeStoryboard();
+                    } else if (parent.id === 'storyboard-zone') {
+                        // Remove from storyboard
+                        tag.remove();
+                        this.generatePrompt();
+                        this.analyzeStoryboard();
+                    }
+                });
+
+                // Listeners for new tag inputs, search, and collapse
+                this.elements.keywordPoolsContainer.addEventListener('keydown', e => {
+                    if (e.target.classList.contains('add-tag-input') && e.key === 'Enter') this.addNewTag(e.target);
+                });
+                this.elements.keywordPoolsContainer.addEventListener('input', e => {
+                    if (e.target.classList.contains('search-pool')) this.filterPool(e.target);
+                });
+                this.elements.keywordPoolsContainer.addEventListener('click', e => {
+                     const header = e.target.closest('.collapsible-header');
+                     if(header) {
+                         header.parentElement.classList.toggle('is-collapsed');
+                     }
+                });
+
+                // Listener for interactive analysis feedback
+                this.elements.analysisOutput.addEventListener('click', e => {
+                    const target = e.target.closest('.clickable');
+                    if(target && target.dataset.targetPool) {
+                        const poolCard = document.getElementById(`pool-container-${target.dataset.targetPool}`);
+                        if(poolCard) {
+                            poolCard.classList.remove('is-collapsed');
+                            poolCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            poolCard.classList.add('highlight-flash');
+                            setTimeout(() => poolCard.classList.remove('highlight-flash'), 1500);
+                        }
+                    }
+                });
+
+                this.elements.storyboardZone.addEventListener('paste', (e) => this.handlePaste(e));
+            },
+
+            // --- WORKFLOW FUNCTIONS ---
+            handlePaste(e) {
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const keywords = pastedText.split(',').map(k => k.trim()).filter(k => k);
+
+                keywords.forEach(keyword => {
+                    let foundCategory = null;
+                    for (const category in this.db.base) {
+                        const allKeywords = [...this.db.base[category], ...this.db.custom[category]];
+                        if (allKeywords.some(dbKeyword => dbKeyword.toLowerCase() === keyword.toLowerCase())) {
+                            foundCategory = category;
+                            break;
+                        }
+                    }
+
+                    if (foundCategory) {
+                        this.elements.storyboardZone.appendChild(this.createTagElement(keyword, foundCategory, true));
+                    } else {
+                        const defaultCategory = 'mainSubject';
+                        if (!this.db.custom[defaultCategory].includes(keyword)) {
+                            this.db.custom[defaultCategory].push(keyword);
+                            this.saveState();
+                            this.renderAllPools();
+                        }
+                        this.elements.storyboardZone.appendChild(this.createTagElement(keyword, defaultCategory, true));
+                    }
+                });
+
+                this.generatePrompt();
+                this.analyzeStoryboard();
+            },
+
+            addNewTag(inputElement) {
+                const value = inputElement.value.trim();
+                const key = inputElement.dataset.poolKey;
+                if (value && !this.db.custom[key].includes(value) && !this.db.base[key].includes(value)) {
+                    this.db.custom[key].push(value);
+                    this.saveState();
+                    this.renderAllPools();
+                }
+                inputElement.value = '';
+            },
+
+            filterPool(inputElement) {
+                const searchTerm = inputElement.value.toLowerCase();
+                const key = inputElement.dataset.poolKey;
+                const pool = document.getElementById(`${key}-pool`);
+                const tags = pool.querySelectorAll('.dnd-tag');
+                tags.forEach(tag => {
+                    const isVisible = tag.dataset.text.toLowerCase().includes(searchTerm);
+                    tag.style.display = isVisible ? 'flex' : 'none';
+                });
+            },
+
+            setupDragAndDrop() { /* ... unchanged ... */ },
+            generatePrompt() { /* ... unchanged ... */ },
+            clearStoryboard() { /* ... unchanged ... */ },
+            copyPrompt() { /* ... unchanged ... */ },
+            randomizeByCategory() { /* ... unchanged ... */ },
+            
+            // --- GEMINI API INTEGRATION ---
+            async expandWithGemini() {
+                const tags = this.elements.storyboardZone.querySelectorAll('.dnd-tag');
+                if (tags.length === 0) {
+                    this.elements.promptOutput.value = "Bitte füge zuerst Keywords zum Storyboard hinzu.";
+                    return;
+                }
+
+                const keywords = Array.from(tags).map(tag => tag.dataset.text).join(', ');
+                const originalButtonText = this.elements.geminiExpandBtn.innerHTML;
+                this.elements.geminiExpandBtn.disabled = true;
+                this.elements.geminiExpandBtn.innerHTML = 'Erweitere...';
+                this.elements.promptOutput.value = "KI generiert eine detaillierte Szene...";
+
+                const systemPrompt = "You are an expert in creating descriptive prompts for AI video generation models like Sora. Your task is to take a list of keywords and expand them into a vivid, detailed, single-paragraph scene description. Focus on visual details, camera movement, lighting, and atmosphere. The output must be in German.";
+                const userQuery = `Erweitere die folgenden Keywords zu einem beschreibenden Video-Prompt: ${keywords}`;
+                
+                try {
+                    const generatedText = await this.callGeminiApi(systemPrompt, userQuery);
+                    this.elements.promptOutput.value = generatedText;
+                } catch (error) {
+                    console.error("Gemini API Error:", error);
+                    this.elements.promptOutput.value = "Ein Fehler ist aufgetreten. Bitte versuche es erneut.";
+                } finally {
+                    this.elements.geminiExpandBtn.disabled = false;
+                    this.elements.geminiExpandBtn.innerHTML = originalButtonText;
+                }
+            },
+
+            async callGeminiApi(systemPrompt, userQuery, retries = 3, delay = 1000) {
+                const apiKey = ""; // Wird von der Umgebung bereitgestellt
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const result = await response.json();
+                        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                        if (text) {
+                            return text;
+                        } else {
+                            throw new Error("Invalid response structure from API.");
+                        }
+                    } catch (error) {
+                        console.error(`Attempt ${i + 1} failed:`, error);
+                        if (i === retries - 1) throw error;
+                        await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+                    }
+                }
+            },
+
+            // --- ANALYSIS ENGINE (UPGRADED & FIXED) ---
+            analyzeStoryboard() {
+                const tags = this.elements.storyboardZone.querySelectorAll('.dnd-tag');
+                const outputEl = this.elements.analysisOutput;
+                const checklistEl = this.elements.analysisChecklist;
+
+                const categorizedTags = { mainSubject: [], visualReaction: [], colorPalette: [], mood: [] };
+                tags.forEach(tag => {
+                    const category = tag.dataset.category;
+                    if (categorizedTags[category]) {
+                        categorizedTags[category].push(tag.dataset.text);
+                    }
+                });
+
+                let checklistHTML = '';
+                const icons = { mainSubject: '🧊', visualReaction: '✨', colorPalette: '🎨', mood: '😊' };
+                for (const key in this.categoryNames) {
+                    const isActive = categorizedTags[key].length > 0;
+                    checklistHTML += `
+                        <div class="checklist-item ${isActive ? 'is-active' : ''}">
+                            <span>${icons[key]}</span> <span>${this.categoryNames[key]}</span>
+                        </div>`;
+                }
+                checklistEl.innerHTML = checklistHTML;
+
+                if (tags.length === 0) {
+                    outputEl.innerHTML = '<p>Füge Keywords hinzu, um die Analyse zu starten.</p>';
+                    return;
+                }
+                
+                let feedback = '';
+                if (categorizedTags.mainSubject.length === 0) {
+                    feedback += `<p class="analysis-feedback-item clickable rounded p-2" data-target-pool="mainSubject" style="color: var(--warning-color);">⚠️ <strong>Kein Hauptmotiv:</strong> Ein klares Motiv ist entscheidend. Klicke hier, um "Mensch" oder "Architektur" auszuwählen.</p>`;
+                } else {
+                    feedback += `<p class="analysis-feedback-item p-2" style="color: var(--success-color);">✅ <strong>Hauptmotiv:</strong> ${categorizedTags.mainSubject.join(', ')}</p>`;
+                }
+                 if (categorizedTags.visualReaction.length === 0) {
+                    feedback += `<p class="analysis-feedback-item clickable rounded p-2" data-target-pool="visualReaction" style="color: var(--warning-color);">⚠️ <strong>Keine Aktion:</strong> Beschreibe, was passiert. Klicke hier, um "Fließen" oder "Explodieren" zu wählen.</p>`;
+                } else {
+                    feedback += `<p class="analysis-feedback-item p-2" style="color: var(--success-color);">✅ <strong>Aktion:</strong> ${categorizedTags.visualReaction.join(', ')}</p>`;
+                }
+                if (categorizedTags.colorPalette.length === 0) {
+                    feedback += `<p class="analysis-feedback-item clickable rounded p-2" data-target-pool="colorPalette">💡 <strong>Tipp:</strong> Eine "Farbpalette" (z.B. "Monochromatisch") definiert den Look. Klicke hier für Vorschläge.</p>`;
+                } else {
+                    feedback += `<p class="analysis-feedback-item p-2" style="color: var(--success-color);">✅ <strong>Farbpalette:</strong> ${categorizedTags.colorPalette.join(', ')}</p>`;
+                }
+                if (categorizedTags.mood.length === 0) {
+                    feedback += `<p class="analysis-feedback-item clickable rounded p-2" data-target-pool="mood">💡 <strong>Tipp:</strong> Eine "Stimmung" (z.B. "düster", "episch") gibt der Szene Tiefe. Klicke hier für Vorschläge.</p>`;
+                } else {
+                    feedback += `<p class="analysis-feedback-item p-2" style="color: var(--success-color);">✅ <strong>Stimmung:</strong> ${categorizedTags.mood.join(', ')}</p>`;
+                }
+                outputEl.innerHTML = feedback;
+            },
+        };
+
+        // --- App Initialization and Polyfilling necessary elements ---
+        App.db.base = {
+            mainSubject: ["Abstrakt", "Architektur", "Daten", "Fahrzeug", "Feuer", "Flächen", "Geometrie", "Harmonie", "Konflikt", "Körper", "Licht", "Linien", "Luft", "Maschine", "Mensch", "Muster", "Natur", "Organisch", "Produkt", "Schatten", "Technik", "Textur", "Transformation", "Verfall", "Wachstum", "Wasser"],
+            visualReaction: ["Abgrenzen", "Aufragen", "Blockieren", "Datenvisualisierung", "Emission", "Energie", "Explodieren", "Fließen", "Gleiten", "Glühen", "Konfrontation", "Kreisen", "Leuchten", "Pulsieren", "Richtung", "Schichten", "Schlängeln", "Schneiden", "Schweben", "Spiegeln", "Splittern", "Starren", "Stehen", "Strahlen", "Twisten", "Überlagern", "Wachen", "Warnen", "Wiederholung", "Wirbeln", "Zeigen", "Zerspringen"],
+            colorPalette: ["Akzentfarben", "Begrenzt", "Dreifarbig", "Düster", "Gelb", "Grauabstufungen", "Hoher Kontrast", "Komplementärfarben", "Lila", "Limettengrün", "Minimalistisch", "Monochromatisch", "Neongrün", "Orange", "Rot", "Schwarz", "Schwarz-Weiß", "Schwarz-Weiß-Rot", "Signalwirkung", "Violett", "Weiß"],
+            mood: ["Aggressiv", "autoritär", "beängstigend", "Bedrohlich", "chaotisch", "dekonstruiert", "destruktiv", "direkt", "dynamisch", "einsam", "elegant", "energetisch", "episch", "explosiv", "fließend", "fremdartig", "futuristisch", "geheimnisvoll", "geordnet", "hypnotisch", "imposant", "industriell", "informativ", "komplex", "kriegerisch", "mächtig", "modern", "monumental", "mysteriös", "organisch", "primitiv", "sauber", "scharfkantig", "schützend", "stark", "symmetrisch", "technisch", "unheimlich", "Vorsicht", "wachsam", "Warnung", "zeremoniell"],
+        };
+        App.db.custom = { mainSubject: [], visualReaction: [], colorPalette: [], mood: [] };
+        App.elements = {
+            storyboardZone: document.getElementById('storyboard-zone'),
+            generateBtn: document.getElementById('generate-btn'),
+            clearBtn: document.getElementById('clear-btn'),
+            copyBtn: document.getElementById('copy-btn'),
+            promptOutput: document.getElementById('prompt-output'),
+            copyFeedback: document.getElementById('copy-feedback'),
+            analysisOutput: document.getElementById('analysis-output'),
+            analysisChecklist: document.getElementById('analysis-checklist'),
+            randomControls: document.getElementById('random-controls'),
+            randomizeByCategoryBtn: document.getElementById('randomize-by-category-btn'),
+            geminiExpandBtn: document.getElementById('gemini-expand-btn'),
+        };
+
+        App.loadState = function() { const savedState = localStorage.getItem('storyboardGeneratorState'); if (savedState) this.db.custom = JSON.parse(savedState); };
+        App.createRandomControls = function() {let html = '';for (const key in this.categoryNames) {html += `<div class="flex items-center justify-between"><label for="random-${key}-count" class="label">${this.categoryNames[key]}</label><input type="number" id="random-${key}-count" class="input-number" value="${key === 'mainSubject' ? 1 : 1}" min="0" max="5"></div>`;}this.elements.randomControls.innerHTML = html;};
+        App.setupDragAndDrop = function() {let draggedItem = null;document.addEventListener('dragstart', (e) => { if (e.target.classList.contains('dnd-tag')) { draggedItem = e.target; setTimeout(() => e.target.classList.add('dragging'), 0); } });document.addEventListener('dragend', () => { if (draggedItem) { draggedItem.classList.remove('dragging'); draggedItem = null; } });[this.elements.storyboardZone, ...document.querySelectorAll('.keyword-pool')].forEach(zone => {zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });zone.addEventListener('dragleave', () => { zone.classList.remove('drag-over'); });zone.addEventListener('drop', (e) => {e.preventDefault(); zone.classList.remove('drag-over');if (draggedItem) {const isFromPool = draggedItem.parentElement.classList.contains('keyword-pool');const isToStoryboard = zone.id === 'storyboard-zone';if (isFromPool && isToStoryboard) {zone.appendChild(this.createTagElement(draggedItem.dataset.text, draggedItem.dataset.category, true));} else if (!isFromPool && !isToStoryboard) {draggedItem.parentElement.removeChild(draggedItem);} else if (isToStoryboard) {zone.appendChild(draggedItem);}this.generatePrompt();this.analyzeStoryboard();}});});};
+        App.generatePrompt = function() { const tags = this.elements.storyboardZone.querySelectorAll('.dnd-tag'); this.elements.promptOutput.value = tags.length > 0 ? Array.from(tags).map(tag => tag.dataset.text).join(', ') : ''; };
+        App.clearStoryboard = function() { this.elements.storyboardZone.innerHTML = ''; this.generatePrompt(); this.analyzeStoryboard(); };
+        App.copyPrompt = function() { if (!this.elements.promptOutput.value) return; document.execCommand('copy'); this.elements.copyFeedback.classList.remove('opacity-0'); setTimeout(() => this.elements.copyFeedback.classList.add('opacity-0'), 2000); };
+        App.randomizeByCategory = function() {this.clearStoryboard();let pickedTags = new Set();for (const key in this.categoryNames) {const count = parseInt(document.getElementById(`random-${key}-count`).value, 10) || 0;if (count === 0) continue;const keywords = [...this.db.base[key], ...this.db.custom[key]];if (keywords.length === 0) continue;for (let i = keywords.length - 1; i > 0; i--) {const j = Math.floor(Math.random() * (i + 1));[keywords[i], keywords[j]] = [keywords[j], keywords[i]];}const selected = keywords.slice(0, count);selected.forEach(tag => pickedTags.add(JSON.stringify({text: tag, category: key})));}pickedTags.forEach(tagJSON => {const tagData = JSON.parse(tagJSON);this.elements.storyboardZone.appendChild(this.createTagElement(tagData.text, tagData.category, true));});this.generatePrompt();this.analyzeStoryboard();};
+        
+        App.init();
+    });
+    </script>
